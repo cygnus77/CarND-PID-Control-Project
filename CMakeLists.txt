@@ -7,8 +7,12 @@ add_definitions(-std=c++11)
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+set(sources src/PID.cpp src/main.cpp src/uWS/Extensions.cpp src/uWS/Group.cpp src/uWS/WebSocketImpl.cpp src/uWS/Networking.cpp src/uWS/Hub.cpp src/uWS/Node.cpp src/uWS/WebSocket.cpp src/uWS/HTTPSocket.cpp src/uWS/Socket.cpp src/uWS/uUV.cpp)
+set_source_files_properties(${sources} PROPERTIES COMPILE_FLAGS "-D_USE_MATH_DEFINES")
+else(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 set(sources src/PID.cpp src/main.cpp)
-
+endif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
@@ -20,7 +24,8 @@ link_directories(/usr/local/Cellar/libuv/1.11.0/lib)
 
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
-
 add_executable(pid ${sources})
 
+if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 target_link_libraries(pid z ssl uv uWS)
+endif(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
