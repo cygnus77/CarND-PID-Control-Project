@@ -8,12 +8,6 @@ set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	include_directories(/vcpkg-master/packages/openssl_x86-windows/include)
-	include_directories(/vcpkg-master/packages/libuv_x86-windows/include)
-	include_directories(/vcpkg-master/packages/zlib_x86-windows/include)
-	link_directories(/vcpkg-master/packages/openssl_x86-windows/lib)
-	link_directories(/vcpkg-master/packages/libuv_x86-windows/lib)
-	link_directories(/vcpkg-master/packages/zlib_x86-windows/lib)
 	
 	set(sources src/PID.cpp src/main.cpp src/uWS/Extensions.cpp src/uWS/Group.cpp src/uWS/WebSocketImpl.cpp src/uWS/Networking.cpp src/uWS/Hub.cpp src/uWS/Node.cpp src/uWS/WebSocket.cpp src/uWS/HTTPSocket.cpp src/uWS/Socket.cpp src/uWS/uUV.cpp)
 	set_source_files_properties(${sources} PROPERTIES COMPILE_FLAGS "-D_USE_MATH_DEFINES")
@@ -34,8 +28,6 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 add_executable(pid ${sources})
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-	target_link_libraries(pid libeay32 ssleay32 libuv zlib)
-else(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	target_link_libraries(pid z ssl uv uWS)
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+endif(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
