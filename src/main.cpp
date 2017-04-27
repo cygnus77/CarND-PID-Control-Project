@@ -32,8 +32,7 @@ int main()
 {
   uWS::Hub h;
 
-  PID pid;
-  // TODO: Initialize the pid variable.
+  PID pid(0.1, 0.1, 0.1);
 
   h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -57,7 +56,13 @@ int main()
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
-          
+
+          steer_value = pid.Kp * cte;// -pid.Kd * pid.d_error - pid.Ki * pid.i_error;
+          if (steer_value > 1) steer_value = 1;
+          if (steer_value < -1)steer_value = -1;
+          pid.UpdateError(cte);
+
+
           // DEBUG
           std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
 
@@ -68,7 +73,8 @@ int main()
           std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
-      } else {
+      }
+      else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
@@ -101,7 +107,7 @@ int main()
   });
 
   int port = 4567;
-  if (h.listen(port))
+  if (h.listen("0.0.0.0", port))
   {
     std::cout << "Listening to port " << port << std::endl;
   }

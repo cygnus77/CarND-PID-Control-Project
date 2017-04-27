@@ -18,19 +18,20 @@ public:
   double Kd;
 
   /*
+  * Cache
+  */
+  double prev_cte;
+  int n; // number of updates
+
+  /*
   * Constructor
   */
-  PID();
+  PID(double Kp, double Ki, double Kd);
 
   /*
   * Destructor.
   */
   virtual ~PID();
-
-  /*
-  * Initialize PID.
-  */
-  void Init(double Kp, double Ki, double Kd);
 
   /*
   * Update the PID error variables given cross track error.
