@@ -21,6 +21,7 @@ public:
   * Cache
   */
   double prev_cte;
+  double mse;
   int n; // number of updates
 
   /*
@@ -32,6 +33,11 @@ public:
   * Destructor.
   */
   virtual ~PID();
+
+  /*
+  * Compute control value
+  */
+  virtual double ComputeControl(double cte);
 
   /*
   * Update the PID error variables given cross track error.

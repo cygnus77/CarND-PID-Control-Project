@@ -28,13 +28,110 @@ std::string hasData(std::string s) {
   return "";
 }
 
+#define CAP(x,l,h)  (x > h ? h : x < l ? l : x)
+
+
+class twiddler : public PID
+{
+public:
+
+  twiddler(double Kp, double Ki, double Kd) :PID(Kp, Ki, Kd)
+  {
+    p[0] = Kp;
+    p[1] = Kd;
+  }
+
+#define NUM_ITERATIONS_PER_RUN  200
+
+  virtual double ComputeControl(double cte)
+  {
+    if (!completed && n == NUM_ITERATIONS_PER_RUN) {
+      adjust(mse / n);
+      this->mse = 0;
+      n = 0;
+    }
+    return PID::ComputeControl(cte);
+  }
+
+protected:
+  int state = 0;
+  int i = 0;
+  double best_err = 1e5;
+  double p[2] = { 0, 0 };
+  double dp[2] = { 1, 1 };
+  bool completed = false;
+
+  void adjust(double err)
+  {
+    std::cout << "adjust(" << err << ")" << std::endl;
+    if (state == 0) {
+      p[i] += dp[i];
+      state = 1;
+      apply();
+      return;
+    }
+    else if (state == 1) {
+      if (err < best_err) {
+        best_err = err;
+        dp[i] *= 1.1;
+
+      }
+      else {
+        p[i] -= 2 * dp[i];
+        state = 2;
+        apply();
+        return;
+      }
+    }
+    else if (state == 2) {
+      if (err < best_err) {
+        best_err = err;
+        dp[i] *= 1.1;
+
+      }
+      else {
+        p[i] += dp[i];
+        dp[i] *= 0.9;
+
+      }
+    }
+
+    // loop again
+    state = 0;
+    i++;
+    if (i == 2) {
+      i = 0;
+      apply();
+      // termination check
+      completed = (dp[0] + dp[1] < 0.02);
+    }
+
+    p[i] += dp[i];
+    state = 1;
+    apply();
+    return;
+  }
+
+  void apply()
+  {
+    Kp = p[0];
+    Kd = p[1];
+    std::cout << "Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << std::endl;
+  }
+
+};
+
+
 int main()
 {
   uWS::Hub h;
 
-  PID pid(0.14, 0.001, 0.9);
+  //PID steering_pid(0.12, 0.001, 0.9);
+  twiddler steering_pid(0, 0, 0);
+  PID speed_pd(0.12, 0, 0.8);
+  double target_speed = 40;
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  h.onMessage([&steering_pid, &speed_pd, &target_speed](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -44,6 +141,7 @@ int main()
       if (s != "") {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
+       
         if (event == "telemetry") {
           // j[1] is the data JSON object
           double cte = std::stod(j[1]["cte"].get<std::string>());
@@ -57,20 +155,32 @@ int main()
           * another PID controller to control the speed!
           */
 
-          steer_value = (-pid.Kp * cte) +(-pid.Kd * pid.d_error) +(-pid.Ki * pid.i_error);
-          if (steer_value > 1) steer_value = 1;
-          if (steer_value < -1)steer_value = -1;
-          pid.UpdateError(cte);
+          if (abs(cte) > 5) {
+            std::string msg = "42[\"reset\"]";
+            //std::cout << msg << std::endl;
+            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+            return;
+          }
 
+          // Compute steering
+          steer_value = steering_pid.ComputeControl(cte);
+          steer_value = CAP(steer_value, -1, 1);
+          steering_pid.UpdateError(cte);
+
+          // Compute throttle
+          double speed_cte = speed - target_speed;
+          double throttle = speed_pd.ComputeControl(speed_cte);
+          throttle = CAP(throttle, -1, 1);
+          speed_pd.UpdateError(speed_cte);
 
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << ", error:" << pid.TotalError() << std::endl;
+          //std::cout << "CTE: " << cte << " Steering Value: " << steer_value << ", error:" << steering_pid.TotalError() << std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       }
