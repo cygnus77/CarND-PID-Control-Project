@@ -41,34 +41,21 @@ public:
     p[1] = Kd;
   }
 
-#define NUM_ITERATIONS_PER_RUN  200
-
-  virtual double ComputeControl(double cte)
+  // Compute next update for Kp, Kd
+  // Call adjust when running the robot comes to an end (crash / completion of track)
+  // Returns true when optimization is completed
+  bool optimize()
   {
-    if (!completed && n == NUM_ITERATIONS_PER_RUN) {
-      adjust(mse / n);
-      this->mse = 0;
-      n = 0;
-    }
-    return PID::ComputeControl(cte);
-  }
+    double err = mse / n;
+    mse = 0;
+    n = 0;
 
-protected:
-  int state = 0;
-  int i = 0;
-  double best_err = 1e5;
-  double p[2] = { 0, 0 };
-  double dp[2] = { 1, 1 };
-  bool completed = false;
-
-  void adjust(double err)
-  {
     std::cout << "adjust(" << err << ")" << std::endl;
     if (state == 0) {
       p[i] += dp[i];
       state = 1;
       apply();
-      return;
+      return false;
     }
     else if (state == 1) {
       if (err < best_err) {
@@ -80,7 +67,7 @@ protected:
         p[i] -= 2 * dp[i];
         state = 2;
         apply();
-        return;
+        return false;
       }
     }
     else if (state == 2) {
@@ -103,14 +90,25 @@ protected:
       i = 0;
       apply();
       // termination check
-      completed = (dp[0] + dp[1] < 0.02);
+      bool done = (dp[0] + dp[1] < 0.002);
+      if (done) {
+        std::cout << "Kp=" << Kp << ", Kd=" << Kd << ", dp: [" << dp[0] << ", " << dp[1] << "]" << std::endl;
+      }
+      return done;
     }
 
     p[i] += dp[i];
     state = 1;
     apply();
-    return;
+    return false;
   }
+
+protected:
+  int state = 0;
+  int i = 0;
+  double best_err = 1e5;
+  double p[2] = { 0, 0 };
+  double dp[2] = { 1, 1 };
 
   void apply()
   {
@@ -126,10 +124,13 @@ int main()
 {
   uWS::Hub h;
 
+
+#define NUM_ITERATIONS_PER_RUN  1000
   //PID steering_pid(0.12, 0.001, 0.9);
   twiddler steering_pid(0, 0, 0);
+  //PID steering_pid(1.22316, 0, 1.63106);
   PID speed_pd(0.12, 0, 0.8);
-  double target_speed = 40;
+  double target_speed = 80;
 
   h.onMessage([&steering_pid, &speed_pd, &target_speed](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -155,8 +156,12 @@ int main()
           * another PID controller to control the speed!
           */
 
-          if (abs(cte) > 5) {
+          if (steering_pid.n > 1000 || abs(cte) > 5) {
             std::string msg = "42[\"reset\"]";
+            if (steering_pid.optimize()) {
+              msg = "42[\"exit\"]";
+            }
+            
             //std::cout << msg << std::endl;
             ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
             return;
