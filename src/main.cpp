@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include "PID.h"
 #include <math.h>
+#include <map>
 
 // for convenience
 using json = nlohmann::json;
@@ -30,6 +31,12 @@ std::string hasData(std::string s) {
 
 #define CAP(x,l,h)  (x > h ? h : x < l ? l : x)
 
+typedef std::pair<double, double> FactorKey;
+
+bool operator < (const FactorKey& p1, const FactorKey& p2) {
+  return p1.first < p2.first ? true : p1.second < p2.second;
+}
+static std::map<FactorKey, double> known_errors;
 
 class twiddler : public PID
 {
@@ -49,7 +56,19 @@ public:
     double err = mse / n;
     mse = 0;
     n = 0;
+    bool res;
 
+    known_errors.insert(std::pair<FactorKey, double>(FactorKey(Kp, Kd), err));
+
+    res = iterate(err);
+    while (known_errors.find(FactorKey(Kp, Kd)) != known_errors.end()) {
+      err = known_errors[FactorKey(Kp, Kd)];
+      res = iterate(err);
+    }
+    return res;
+  }
+
+  bool iterate(double err) {
     std::cout << "adjust(" << err << ")" << std::endl;
     if (state == 0) {
       p[i] += dp[i];
@@ -60,7 +79,7 @@ public:
     else if (state == 1) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1.1;
+        dp[i] *= 1.01;
 
       }
       else {
@@ -73,12 +92,12 @@ public:
     else if (state == 2) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1.1;
+        dp[i] *= 1.01;
 
       }
       else {
         p[i] += dp[i];
-        dp[i] *= 0.9;
+        dp[i] *= 0.99;
 
       }
     }
@@ -119,18 +138,18 @@ protected:
 
 };
 
-
 int main()
 {
   uWS::Hub h;
 
 
 #define NUM_ITERATIONS_PER_RUN  1000
-  //PID steering_pid(0.12, 0.001, 0.9);
+  double target_speed = 40;
+  //PID steering_pid(0.122567, 1e-5, 4.56273);
   twiddler steering_pid(0, 0, 0);
   //PID steering_pid(1.22316, 0, 1.63106);
   PID speed_pd(0.12, 0, 0.8);
-  double target_speed = 80;
+
 
   h.onMessage([&steering_pid, &speed_pd, &target_speed](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -142,7 +161,7 @@ int main()
       if (s != "") {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
-       
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
           double cte = std::stod(j[1]["cte"].get<std::string>());
@@ -156,17 +175,19 @@ int main()
           * another PID controller to control the speed!
           */
 
-          if (steering_pid.n > 1000 || abs(cte) > 5) {
+          
+          if (steering_pid.n > 2000 || abs(cte) > 5) {
             std::string msg = "42[\"reset\"]";
+
             if (steering_pid.optimize()) {
-              msg = "42[\"exit\"]";
+              // Completed - stop ?
             }
-            
+
             //std::cout << msg << std::endl;
             ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
             return;
           }
-
+          
           // Compute steering
           steer_value = steering_pid.ComputeControl(cte);
           steer_value = CAP(steer_value, -1, 1);
