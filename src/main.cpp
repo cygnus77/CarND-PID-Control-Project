@@ -38,6 +38,8 @@ bool operator < (const FactorKey& p1, const FactorKey& p2) {
 }
 static std::map<FactorKey, double> known_errors;
 
+#define DELTA_T 0.01
+
 class twiddler : public PID
 {
 public:
@@ -53,9 +55,8 @@ public:
   // Returns true when optimization is completed
   bool optimize()
   {
+    std::cout << "Optimze " << mse << ", " << n << std::endl;
     double err = mse / n;
-    mse = 0;
-    n = 0;
     bool res;
 
     known_errors.insert(std::pair<FactorKey, double>(FactorKey(Kp, Kd), err));
@@ -63,10 +64,16 @@ public:
     res = iterate(err);
     while (known_errors.find(FactorKey(Kp, Kd)) != known_errors.end()) {
       err = known_errors[FactorKey(Kp, Kd)];
+      std::cout << "Lookup " << err << std::endl;
       res = iterate(err);
     }
+    mse = 0;
+    n = 0;
+
     return res;
   }
+
+protected:
 
   bool iterate(double err) {
     std::cout << "adjust(" << err << ")" << std::endl;
@@ -79,7 +86,7 @@ public:
     else if (state == 1) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1.01;
+        dp[i] *= 1 + DELTA_T;
 
       }
       else {
@@ -92,12 +99,12 @@ public:
     else if (state == 2) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1.01;
+        dp[i] *= 1 + DELTA_T;
 
       }
       else {
         p[i] += dp[i];
-        dp[i] *= 0.99;
+        dp[i] *= 1 - DELTA_T;
 
       }
     }
@@ -122,7 +129,6 @@ public:
     return false;
   }
 
-protected:
   int state = 0;
   int i = 0;
   double best_err = 1e5;
@@ -174,16 +180,18 @@ int main()
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
+          if (steering_pid.n == 0 && abs(cte) > 5) return;
 
-          
-          if (steering_pid.n > 2000 || abs(cte) > 5) {
-            std::string msg = "42[\"reset\"]";
+          if (steering_pid.n > 2000 || abs(cte) > 5 || (steering_pid.n > 10 && speed < 1)) {
+            std::cout << "n=" << steering_pid.n << ", cte=" << abs(cte) << std::endl;
 
             if (steering_pid.optimize()) {
               // Completed - stop ?
             }
 
-            //std::cout << msg << std::endl;
+            std::string msg = "42[\"reset\"]";
+
+            std::cout << msg << std::endl;
             ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
             return;
           }
