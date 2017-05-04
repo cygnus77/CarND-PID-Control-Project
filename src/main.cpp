@@ -17,10 +17,9 @@ double rad2deg(double x) { return x * 180 / pi(); }
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
 std::string hasData(std::string s) {
-  auto found_null = s.find("null");
   auto b1 = s.find_first_of("[");
   auto b2 = s.find_last_of("]");
-  if (found_null != std::string::npos) {
+  if (s.compare("null") == 0) {
     return "";
   }
   else if (b1 != std::string::npos && b2 != std::string::npos) {
@@ -38,7 +37,7 @@ bool operator < (const FactorKey& p1, const FactorKey& p2) {
 }
 static std::map<FactorKey, double> known_errors;
 
-#define DELTA_T 0.01
+#define DELTA_P 0.1
 
 class twiddler : public PID
 {
@@ -86,7 +85,7 @@ protected:
     else if (state == 1) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1 + DELTA_T;
+        dp[i] *= 1 + DELTA_P;
 
       }
       else {
@@ -99,12 +98,12 @@ protected:
     else if (state == 2) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1 + DELTA_T;
+        dp[i] *= 1 + DELTA_P;
 
       }
       else {
         p[i] += dp[i];
-        dp[i] *= 1 - DELTA_T;
+        dp[i] *= 1 - DELTA_P;
 
       }
     }
@@ -180,32 +179,40 @@ int main()
           * NOTE: Feel free to play around with the throttle and speed. Maybe use
           * another PID controller to control the speed!
           */
-          if (steering_pid.n == 0 && abs(cte) > 5) return;
 
-          if (steering_pid.n > 2000 || abs(cte) > 5 || (steering_pid.n > 10 && speed < 1)) {
-            std::cout << "n=" << steering_pid.n << ", cte=" << abs(cte) << std::endl;
+          // message from previous run (queued before reset)
+          if (steering_pid.n == 0 && abs(cte) > 5) {
+            std::cout << "** n=" << steering_pid.n << ", cte=" << abs(cte) << std::endl;
+            steer_value = 0;
+          }
+          else {
 
-            if (steering_pid.optimize()) {
-              // Completed - stop ?
+            if (steering_pid.n > 2000 || abs(cte) > 5 || (steering_pid.n > 10 && speed < 0.1)) {
+              std::cout << "n=" << steering_pid.n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
+
+              if (steering_pid.optimize()) {
+                // Completed - stop ?
+              }
+
+              std::string msg = "42[\"reset\"]";
+
+              std::cout << msg << std::endl;
+              ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+              return;
             }
 
-            std::string msg = "42[\"reset\"]";
-
-            std::cout << msg << std::endl;
-            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-            return;
+            // Compute steering
+            steer_value = steering_pid.ComputeControl(cte);
+            steer_value = CAP(steer_value, -1, 1);
+            steering_pid.UpdateError(cte);
           }
-          
-          // Compute steering
-          steer_value = steering_pid.ComputeControl(cte);
-          steer_value = CAP(steer_value, -1, 1);
-          steering_pid.UpdateError(cte);
 
           // Compute throttle
-          double speed_cte = speed - target_speed;
-          double throttle = speed_pd.ComputeControl(speed_cte);
-          throttle = CAP(throttle, -1, 1);
-          speed_pd.UpdateError(speed_cte);
+          //double speed_cte = speed - target_speed;
+          //double throttle = speed_pd.ComputeControl(speed_cte);
+          //throttle = CAP(throttle, -1, 1);
+          //speed_pd.UpdateError(speed_cte);
+          double throttle = 30;
 
           // DEBUG
           //std::cout << "CTE: " << cte << " Steering Value: " << steer_value << ", error:" << steering_pid.TotalError() << std::endl;
@@ -216,6 +223,9 @@ int main()
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+        }
+        else {
+          std::cout << event << std::endl;
         }
       }
       else {
