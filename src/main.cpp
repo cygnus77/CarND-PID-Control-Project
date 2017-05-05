@@ -55,7 +55,7 @@ public:
   bool optimize()
   {
     std::cout << "Optimze " << mse << ", " << n << std::endl;
-    double err = mse / n;
+    double err = mse / (n*n);
     bool res;
 
     known_errors.insert(std::pair<FactorKey, double>(FactorKey(Kp, Kd), err));
@@ -208,11 +208,10 @@ int main()
           }
 
           // Compute throttle
-          //double speed_cte = speed - target_speed;
-          //double throttle = speed_pd.ComputeControl(speed_cte);
-          //throttle = CAP(throttle, -1, 1);
-          //speed_pd.UpdateError(speed_cte);
-          double throttle = 30;
+          double speed_cte = speed - target_speed;
+          double throttle = speed_pd.ComputeControl(speed_cte);
+          throttle = CAP(throttle, -1, 1);
+          speed_pd.UpdateError(speed_cte);
 
           // DEBUG
           //std::cout << "CTE: " << cte << " Steering Value: " << steer_value << ", error:" << steering_pid.TotalError() << std::endl;
