@@ -72,6 +72,13 @@ public:
     return res;
   }
 
+  int limit()
+  {
+    if (dp[0] + dp[1] > 0.2) return 500;
+    if (dp[0] + dp[1] > 0.02) return 1000;
+    return 2000;
+  }
+
 protected:
 
   bool iterate(double err) {
@@ -117,7 +124,7 @@ protected:
       // termination check
       bool done = (dp[0] + dp[1] < 0.002);
       if (done) {
-        std::cout << "Kp=" << Kp << ", Kd=" << Kd << ", dp: [" << dp[0] << ", " << dp[1] << "]" << std::endl;
+        // do something 
       }
       return done;
     }
@@ -138,7 +145,7 @@ protected:
   {
     Kp = p[0];
     Kd = p[1];
-    std::cout << "Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << std::endl;
+    std::cout << "Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << ", dp: [" << dp[0] << ", " << dp[1] << "]" << std::endl;
   }
 
 };
@@ -187,7 +194,7 @@ int main()
           }
           else {
 
-            if (steering_pid.n > 2000 || abs(cte) > 5 || (steering_pid.n > 10 && speed < 0.1)) {
+            if (steering_pid.n > steering_pid.limit()) { // || abs(cte) > 5 || (steering_pid.n > 10 && speed < 0.1)) {
               std::cout << "n=" << steering_pid.n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
 
               if (steering_pid.optimize()) {
