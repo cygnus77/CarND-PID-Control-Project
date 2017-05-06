@@ -74,8 +74,8 @@ public:
 
   int limit()
   {
-    if (dp[0] + dp[1] > 0.2) return 500;
-    if (dp[0] + dp[1] > 0.02) return 1000;
+    if (dp[0] + dp[1] > 0.1) return 500;
+    if (dp[0] + dp[1] > 0.01) return 1000;
     return 2000;
   }
 
@@ -158,7 +158,7 @@ int main()
 #define NUM_ITERATIONS_PER_RUN  1000
   double target_speed = 40;
   //PID steering_pid(0.122567, 1e-5, 4.56273);
-  twiddler steering_pid(0, 0, 0);
+  twiddler steering_pid(0.3, 0, 3.3);//Kp=0.349867, Ki=0, Kd=3.33381
   //PID steering_pid(1.22316, 0, 1.63106);
   PID speed_pd(0.12, 0, 0.8);
 
