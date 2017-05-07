@@ -6,7 +6,7 @@ using namespace std;
 * TODO: Complete the PID class.
 */
 
-PID::PID(double Kp, double Ki, double Kd):Kp(Kp), Kd(Kd), Ki(Ki), d_error(0), i_error(0), mse(0),n(0) {}
+PID::PID(double Kp, double Ki, double Kd):Kp(Kp), Kd(Kd), Ki(Ki), d_error(0), i_error(0), mse(0), n(0), prev_cte(0) {}
 
 PID::~PID() {}
 
@@ -24,4 +24,16 @@ double PID::TotalError() {
 
 double PID::ComputeControl(double cte) {
   return -Kp * cte - Kd * d_error - Ki * i_error;
+}
+
+bool PID::Optimize()
+{
+  return true;
+}
+
+void PID::Reset()
+{
+  mse = 0;
+  n = 0;
+  prev_cte = i_error = d_error = 0;
 }

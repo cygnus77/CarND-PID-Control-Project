@@ -6,7 +6,6 @@ public:
   /*
   * Errors
   */
-  double p_error;
   double i_error;
   double d_error;
 
@@ -33,6 +32,16 @@ public:
   * Destructor.
   */
   virtual ~PID();
+
+  /*
+  * Reset
+  */
+  void Reset();
+
+  /*
+  * Optimize - used for twiddling
+  */
+  virtual bool Optimize();
 
   /*
   * Compute control value

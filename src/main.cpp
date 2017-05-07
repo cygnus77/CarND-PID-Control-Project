@@ -35,111 +35,97 @@ typedef std::pair<double, double> FactorKey;
 bool operator < (const FactorKey& p1, const FactorKey& p2) {
   return p1.first < p2.first ? true : p1.second < p2.second;
 }
-static std::map<FactorKey, double> known_errors;
 
-#define DELTA_P 0.1
-
+// Implements twiddle algorightm
+// Subclass of PID that can be used in its place
 class twiddler : public PID
 {
 public:
 
-  twiddler(double Kp, double Ki, double Kd) :PID(Kp, Ki, Kd)
+  twiddler(double Kp, double Ki, double Kd, double dp1, double dp2) :PID(Kp, Ki, Kd)
   {
     p[0] = Kp;
     p[1] = Kd;
+    dp[0] = dp1;
+    dp[1] = dp2;
   }
 
   // Compute next update for Kp, Kd
-  // Call adjust when running the robot comes to an end (crash / completion of track)
+  // Call optimize when running the robot comes to an end (crash / completion of track)
   // Returns true when optimization is completed
-  bool optimize()
+  virtual bool Optimize()
   {
-    std::cout << "Optimze " << mse << ", " << n << std::endl;
     double err = mse / (n*n);
-    bool res;
+    Reset();
 
-    known_errors.insert(std::pair<FactorKey, double>(FactorKey(Kp, Kd), err));
-
-    res = iterate(err);
-    while (known_errors.find(FactorKey(Kp, Kd)) != known_errors.end()) {
-      err = known_errors[FactorKey(Kp, Kd)];
-      std::cout << "Lookup " << err << std::endl;
-      res = iterate(err);
+    // Very first run
+    if (bIsFirstRun) {
+      best_err = err;
+      bIsFirstRun = false;
     }
-    mse = 0;
-    n = 0;
 
-    return res;
-  }
-
-  int limit()
-  {
-    if (dp[0] + dp[1] > 0.1) return 500;
-    if (dp[0] + dp[1] > 0.01) return 1000;
-    return 2000;
+    return iterate_twiddle_loop(err);
   }
 
 protected:
+  const double STEP_SIZE = 0.1;
+  bool bIsFirstRun = true;
+  int twid_state = 0;
+  int i = 0;
+  double best_err;
+  double p[2] = { 0, 0 };
+  double dp[2] = { 1, 1 };
 
-  bool iterate(double err) {
-    std::cout << "adjust(" << err << ")" << std::endl;
-    if (state == 0) {
+  // Unrolled twiddle loop
+  // returns false to run robot
+  bool iterate_twiddle_loop(double err) {
+    std::cout << "adjust(" << err << "); best_err=" << best_err << std::endl;
+    if (twid_state == 0) {
       p[i] += dp[i];
-      state = 1;
+      twid_state = 1;
       apply();
       return false;
     }
-    else if (state == 1) {
+    else if (twid_state == 1) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1 + DELTA_P;
-
+        dp[i] *= (1 + STEP_SIZE);
       }
       else {
         p[i] -= 2 * dp[i];
-        state = 2;
+        twid_state = 2;
         apply();
         return false;
       }
     }
-    else if (state == 2) {
+    else if (twid_state == 2) {
       if (err < best_err) {
         best_err = err;
-        dp[i] *= 1 + DELTA_P;
-
+        dp[i] *= (1 + STEP_SIZE);
       }
       else {
         p[i] += dp[i];
-        dp[i] *= 1 - DELTA_P;
-
+        dp[i] *= (1 - STEP_SIZE);
       }
     }
 
     // loop again
-    state = 0;
+    twid_state = 0;
     i++;
     if (i == 2) {
       i = 0;
-      apply();
       // termination check
-      bool done = (dp[0] + dp[1] < 0.002);
+      bool done = (dp[0] + dp[1] < 0.02);
       if (done) {
-        // do something 
+        return true;
       }
-      return done;
     }
 
     p[i] += dp[i];
-    state = 1;
+    twid_state = 1;
     apply();
     return false;
   }
-
-  int state = 0;
-  int i = 0;
-  double best_err = 1e5;
-  double p[2] = { 0, 0 };
-  double dp[2] = { 1, 1 };
 
   void apply()
   {
@@ -147,21 +133,25 @@ protected:
     Kd = p[1];
     std::cout << "Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << ", dp: [" << dp[0] << ", " << dp[1] << "]" << std::endl;
   }
-
 };
 
-int main()
+int main(int argc, char** argv)
 {
   uWS::Hub h;
 
-
-#define NUM_ITERATIONS_PER_RUN  1000
+  bool doTwiddle = false;
+  PID *steering_pid;
+  if (argc >= 2) {
+    doTwiddle = true;
+    steering_pid = new twiddler(0.122567, 1e-5, 1.25273, 0.1, 1);
+  }
+  else {
+    steering_pid = new PID(0.122567, 1e-5, 1.25273);
+  }
   double target_speed = 40;
   //PID steering_pid(0.122567, 1e-5, 4.56273);
-  twiddler steering_pid(0.3, 0, 3.3);//Kp=0.349867, Ki=0, Kd=3.33381
   //PID steering_pid(1.22316, 0, 1.63106);
   PID speed_pd(0.12, 0, 0.8);
-
 
   h.onMessage([&steering_pid, &speed_pd, &target_speed](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -188,30 +178,30 @@ int main()
           */
 
           // message from previous run (queued before reset)
-          if (steering_pid.n == 0 && abs(cte) > 5) {
-            std::cout << "** n=" << steering_pid.n << ", cte=" << abs(cte) << std::endl;
+          if (steering_pid->n == 0 && abs(cte) > 5) {
+            std::cout << "** n=" << steering_pid->n << ", cte=" << abs(cte) << std::endl;
             steer_value = 0;
           }
           else {
+              if (steering_pid->n > 2000 || abs(cte) > 5 || (steering_pid->n > 10 && speed < 0.1)) {
+                std::cout << "n=" << steering_pid->n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
 
-            if (steering_pid.n > steering_pid.limit()) { // || abs(cte) > 5 || (steering_pid.n > 10 && speed < 0.1)) {
-              std::cout << "n=" << steering_pid.n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
+                if (steering_pid->Optimize()) {
+                  // Completed - stop ?
+                  ws.close();
+                }
 
-              if (steering_pid.optimize()) {
-                // Completed - stop ?
+                std::string msg = "42[\"reset\"]";
+
+                std::cout << msg << std::endl;
+                ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+                return;
               }
 
-              std::string msg = "42[\"reset\"]";
-
-              std::cout << msg << std::endl;
-              ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-              return;
-            }
-
             // Compute steering
-            steer_value = steering_pid.ComputeControl(cte);
+            steer_value = steering_pid->ComputeControl(cte);
             steer_value = CAP(steer_value, -1, 1);
-            steering_pid.UpdateError(cte);
+            steering_pid->UpdateError(cte);
           }
 
           // Compute throttle
@@ -277,4 +267,5 @@ int main()
     return -1;
   }
   h.run();
+  delete steering_pid;
 }
