@@ -4,6 +4,7 @@
 #include "PID.h"
 #include <math.h>
 #include <map>
+#include <ctime> 
 
 // for convenience
 using json = nlohmann::json;
@@ -135,6 +136,42 @@ protected:
   }
 };
 
+class event_freq
+{
+private:
+  long instances;
+  std::time_t start_time;
+public:
+  event_freq() : instances(0) {}
+  double operator()() {
+    if (instances == 0) {
+      ++instances;
+      start_time = std::time(nullptr);
+      return 0;
+    }
+    return ++instances / std::difftime(std::time(nullptr), start_time);
+  }
+};
+
+double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
+{
+  //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
+  double target_speed;
+  if (poll_freq >= 30) target_speed = 80;
+  else if (poll_freq >= 20) target_speed = 60;
+  else target_speed = 40;
+
+  double steer = abs(steering_angle);
+  if (steer >= 0.3) {
+    target_speed *= 0.5;
+  }
+  else if (steer >= 0.2) {
+    target_speed *= 0.9;
+  }
+  //std::cout << ", target_speed: " << target_speed << std::endl;
+  return target_speed;
+}
+
 int main(int argc, char** argv)
 {
   uWS::Hub h;
@@ -143,17 +180,19 @@ int main(int argc, char** argv)
   PID *steering_pid;
   if (argc >= 2) {
     doTwiddle = true;
-    steering_pid = new twiddler(0.122567, 1e-5, 1.25273, 0.1, 1);
+    //steering_pid = new twiddler(0.122567, 1e-5, 1.25273, 0.1, 1);
+    steering_pid = new twiddler(0, 1e-5, 0, 1, 1);
   }
   else {
-    steering_pid = new PID(0.122567, 1e-5, 1.25273);
+    steering_pid = new PID(0.155933, 1e-05, 2.7479);
   }
-  double target_speed = 40;
+  event_freq ev_freq;
+
   //PID steering_pid(0.122567, 1e-5, 4.56273);
   //PID steering_pid(1.22316, 0, 1.63106);
   PID speed_pd(0.12, 0, 0.8);
 
-  h.onMessage([&steering_pid, &speed_pd, &target_speed](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  h.onMessage([&steering_pid, &speed_pd, &ev_freq, &doTwiddle](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -183,20 +222,23 @@ int main(int argc, char** argv)
             steer_value = 0;
           }
           else {
+            if (doTwiddle) {
               if (steering_pid->n > 2000 || abs(cte) > 5 || (steering_pid->n > 10 && speed < 0.1)) {
                 std::cout << "n=" << steering_pid->n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
 
                 if (steering_pid->Optimize()) {
                   // Completed - stop ?
-                  ws.close();
+                  //return;
                 }
 
                 std::string msg = "42[\"reset\"]";
-
-                std::cout << msg << std::endl;
+                //std::cout << msg << std::endl;
                 ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+
+                ev_freq = event_freq();
                 return;
               }
+            }
 
             // Compute steering
             steer_value = steering_pid->ComputeControl(cte);
@@ -205,6 +247,7 @@ int main(int argc, char** argv)
           }
 
           // Compute throttle
+          double target_speed = computeTargetSpeed(ev_freq(), speed, steer_value);
           double speed_cte = speed - target_speed;
           double throttle = speed_pd.ComputeControl(speed_cte);
           throttle = CAP(throttle, -1, 1);
