@@ -2,9 +2,14 @@
 Self-Driving Car Engineer Nanodegree Program
 
 ---
+
+## Results
+
+[![Youtube video of results](./track-96mph.png)](https://youtu.be/sZSpr_at3f0)
+
 ## Implementation details
 
-In this implementation, I could get the car to reach 96.5 MPH (see video below).
+In this implementation, I could get the car to reach 96.5 MPH (see video above).
 The program implements a PID controller to generate steering angles and a PD controller for generating throttle values in response to telemetry requests from the simulator.
 
 ### Steering control
@@ -49,9 +54,6 @@ Squaring the number of calls has the effect of penalising crashes that occur soo
 ### Crash detection
 The car is considered crashed if (a) the CTE is too high (5) - that is, the car has left the track or (b) the speed drops to less than 0.1 (when sometimes it gets stuck on the curb)
 
-## Results
-
-[![Youtube video of results](./track-96mph.png)](https://youtu.be/sZSpr_at3f0)
 
 
 ---
