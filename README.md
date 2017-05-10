@@ -2,6 +2,59 @@
 Self-Driving Car Engineer Nanodegree Program
 
 ---
+## Implementation details
+
+In this implementation, I could get the car to reach 96.5 MPH (see video below).
+The program implements a PID controller to generate steering angles and a PD controller for generating throttle values in response to telemetry requests from the simulator.
+
+### Steering control
+Kp, Kd values were selected after extensive `twiddling` using the algorithm described below.
+Ki value was hand-picked to smooth turns on curved sections of road.
+The values were selected so that the car performs reasonably well at different speeds and for different simulator settings.
+
+### Speed Control
+Selecting the correct speed is a key function of the program. The function `computeTargetSpeed` allows us to target higher speeds on straight segments of track and drop the speed when making a sharp turn.
+The function sets target speed based on:
+
+- Telemetry frequency 
+- Steering angle
+
+Speed is reduced when the car is making turns:
+
+- Reduce speed by 10% for steering angles > 0.2
+- Reduce speed by 20% for steering angles > 0.3
+- Reduce speed by 50% for steering angles > 0.4
+
+Speed is also reduced when the polling frequency is low. Polling frequency drops when the simulator runs on a slow PC or user selected larger or higher quality rendering.
+Higher the polling frequency, the more control we have over the car, so the faster we can go.
+The class `event_freq` is used to track polling frequency so we can adjust target speed.
+Here are the adjustments based on polling frequency:
+
+- Target 100 mph when polling frequency > 35 calls / sec
+- Target 80 mph when polling frequency > 30 calls / sec
+- Target 50 mph when polling frequency > 20 calls / sec
+- Target 40 mph if it is slower
+
+## Twiddle
+I implemented twiddle as a sub-class of PID controller called `twiddler`. The class unrolls twiddle loop into a simple state machine.
+The car is run on the simulator track for up to 2000 telemetry calls or a crash occurs.
+
+### Error metric
+After each run, the twiddle algorigthm executes one additional interation of the loop, adjusting Kp, Kd values based on an `error` value computed during the run.
+
+`error = sum of squares of cte values / square of number of telemetry calls`
+
+Squaring the number of calls has the effect of penalising crashes that occur sooner and rewarding longer runs.
+
+### Crash detection
+The car is considered crashed if (a) the CTE is too high (5) - that is, the car has left the track or (b) the speed drops to less than 0.1 (when sometimes it gets stuck on the curb)
+
+## Results
+
+[![Youtube video of results](./track-96mph.png)](https://youtu.be/sZSpr_at3f0)
+
+
+---
 
 ## Dependencies
 

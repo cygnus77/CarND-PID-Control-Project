@@ -54,7 +54,10 @@ public:
   // Returns true when optimization is completed
   virtual bool Optimize()
   {
+    // `error = sum of squares of cte values / square of number of telemetry calls`
+    // Squaring the number of calls has the effect of penalising crashes that occur sooner and rewarding longer runs.
     double err = mse / (n*n);
+
     Reset();
 
     // Very first run
@@ -157,8 +160,9 @@ public:
 
 // Function to set target speed based on (i) telemetry frequency and (ii) steering angle
 // Speed is reduced when the car is making turns
-// Speed is reduced when the polling frequency is low - like when its running on a slow PC or user selected larger or higher quality rendering in the simulator
-double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
+// Speed is reduced when the polling frequency is low - like when its running on a slow PC or user selected larger or higher quality rendering in the simulator.
+// Higher the polling frequency, the more control we have over the car, so the faster we can go.
+double computeTargetSpeed(double poll_freq, double steering_angle)
 {
   //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
   double target_speed;
@@ -267,7 +271,7 @@ int main(int argc, char** argv)
           }
 
           // Compute throttle from steering PD controller
-          double target_speed = doTwiddle? 40 : computeTargetSpeed(ev_freq(), speed, steer_value);
+          double target_speed = doTwiddle? 40 : computeTargetSpeed(ev_freq(), steer_value);
           double speed_cte = speed - target_speed;
           double throttle = speed_pd.ComputeControl(speed_cte);
           throttle = CAP(throttle, -1, 1);
