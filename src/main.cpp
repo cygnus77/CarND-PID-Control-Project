@@ -157,13 +157,16 @@ double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
 {
   //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
   double target_speed;
-  if (poll_freq >= 30) target_speed = 80;
-  else if (poll_freq >= 20) target_speed = 60;
-  else target_speed = 40;
+  if (poll_freq >= 30) target_speed = 100;
+  else if (poll_freq >= 20) target_speed = 80;
+  else target_speed = 50;
 
   double steer = abs(steering_angle);
-  if (steer >= 0.3) {
+  if (steer >= 0.4) {
     target_speed *= 0.5;
+  }
+  else if (steer >= 0.3) {
+    target_speed *= 0.8;
   }
   else if (steer >= 0.2) {
     target_speed *= 0.9;
@@ -181,16 +184,16 @@ int main(int argc, char** argv)
   if (argc >= 2) {
     doTwiddle = true;
     //steering_pid = new twiddler(0.122567, 1e-5, 1.25273, 0.1, 1);
-    steering_pid = new twiddler(0, 1e-5, 0, 1, 1);
+    steering_pid = new twiddler(0.155933, 1e-3, 2.7479, .1, .1);
   }
   else {
-    steering_pid = new PID(0.155933, 1e-05, 2.7479);
+    steering_pid = new PID(0.0883237, 0.001, 2.67196);
   }
   event_freq ev_freq;
 
   //PID steering_pid(0.122567, 1e-5, 4.56273);
   //PID steering_pid(1.22316, 0, 1.63106);
-  PID speed_pd(0.12, 0, 0.8);
+  PID speed_pd(1, 0, 3);
 
   h.onMessage([&steering_pid, &speed_pd, &ev_freq, &doTwiddle](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
