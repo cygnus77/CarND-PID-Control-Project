@@ -5,6 +5,7 @@
 #include <math.h>
 #include <map>
 #include <ctime> 
+#include <chrono>
 
 // for convenience
 using json = nlohmann::json;
@@ -140,22 +141,23 @@ class event_freq
 {
 private:
   long instances;
-  std::time_t start_time;
+  std::chrono::steady_clock::time_point start_time;
 public:
   event_freq() : instances(0) {}
   double operator()() {
     if (instances == 0) {
       ++instances;
-      start_time = std::time(nullptr);
+      start_time = std::chrono::steady_clock::now();
       return 0;
     }
-    return ++instances / std::difftime(std::time(nullptr), start_time);
+    std::chrono::duration<double> dif = std::chrono::steady_clock::now() - start_time;
+    return ++instances / dif.count();
   }
 };
 
 double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
 {
-  //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
+  std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
   double target_speed;
   if (poll_freq >= 30) target_speed = 100;
   else if (poll_freq >= 20) target_speed = 80;
@@ -171,7 +173,7 @@ double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
   else if (steer >= 0.2) {
     target_speed *= 0.9;
   }
-  //std::cout << ", target_speed: " << target_speed << std::endl;
+  std::cout << ", target_speed: " << target_speed << std::endl;
   return target_speed;
 }
 
@@ -238,6 +240,7 @@ int main(int argc, char** argv)
                 //std::cout << msg << std::endl;
                 ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 
+                speed_pd.Reset();
                 ev_freq = event_freq();
                 return;
               }
@@ -250,7 +253,7 @@ int main(int argc, char** argv)
           }
 
           // Compute throttle
-          double target_speed = computeTargetSpeed(ev_freq(), speed, steer_value);
+          double target_speed = doTwiddle? 40 : computeTargetSpeed(ev_freq(), speed, steer_value);
           double speed_cte = speed - target_speed;
           double throttle = speed_pd.ComputeControl(speed_cte);
           throttle = CAP(throttle, -1, 1);
