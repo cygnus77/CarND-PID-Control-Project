@@ -157,7 +157,7 @@ public:
 
 double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
 {
-  std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
+  //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
   double target_speed;
   if (poll_freq >= 30) target_speed = 100;
   else if (poll_freq >= 20) target_speed = 80;
@@ -173,7 +173,7 @@ double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
   else if (steer >= 0.2) {
     target_speed *= 0.9;
   }
-  std::cout << ", target_speed: " << target_speed << std::endl;
+  //std::cout << ", target_speed: " << target_speed << std::endl;
   return target_speed;
 }
 
