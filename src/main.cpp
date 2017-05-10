@@ -4,7 +4,7 @@
 #include "PID.h"
 #include <math.h>
 #include <map>
-#include <ctime> 
+#include <ctime>
 #include <chrono>
 
 // for convenience
@@ -159,9 +159,10 @@ double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
 {
   //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
   double target_speed;
-  if (poll_freq >= 30) target_speed = 100;
-  else if (poll_freq >= 20) target_speed = 80;
-  else target_speed = 50;
+  if (poll_freq >= 35) target_speed = 100;
+  else if (poll_freq >= 30) target_speed = 80;
+  else if (poll_freq >= 20) target_speed = 50;
+  else target_speed = 40;
 
   double steer = abs(steering_angle);
   if (steer >= 0.4) {
