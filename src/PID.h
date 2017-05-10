@@ -34,7 +34,7 @@ public:
   virtual ~PID();
 
   /*
-  * Reset
+  * Reset PID to initial state
   */
   void Reset();
 

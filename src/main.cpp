@@ -30,20 +30,16 @@ std::string hasData(std::string s) {
   return "";
 }
 
+// Limit a value between min and max
 #define CAP(x,l,h)  (x > h ? h : x < l ? l : x)
-
-typedef std::pair<double, double> FactorKey;
-
-bool operator < (const FactorKey& p1, const FactorKey& p2) {
-  return p1.first < p2.first ? true : p1.second < p2.second;
-}
 
 // Implements twiddle algorightm
 // Subclass of PID that can be used in its place
+// Unrolls twiddle loop into a state machine
 class twiddler : public PID
 {
 public:
-
+  // Twiddle constructor - initial values for PID and increment
   twiddler(double Kp, double Ki, double Kd, double dp1, double dp2) :PID(Kp, Ki, Kd)
   {
     p[0] = Kp;
@@ -53,6 +49,7 @@ public:
   }
 
   // Compute next update for Kp, Kd
+  // Does not modify Ki
   // Call optimize when running the robot comes to an end (crash / completion of track)
   // Returns true when optimization is completed
   virtual bool Optimize()
@@ -65,7 +62,6 @@ public:
       best_err = err;
       bIsFirstRun = false;
     }
-
     return iterate_twiddle_loop(err);
   }
 
@@ -129,6 +125,7 @@ protected:
     return false;
   }
 
+  // Set new Kp,Ki & Kd values
   void apply()
   {
     Kp = p[0];
@@ -137,6 +134,8 @@ protected:
   }
 };
 
+// Class to compute frequency of telemetry polling
+// Frequency of telemetry polling is used to select a max speed.
 class event_freq
 {
 private:
@@ -144,6 +143,7 @@ private:
   std::chrono::steady_clock::time_point start_time;
 public:
   event_freq() : instances(0) {}
+  // return frequency as of now
   double operator()() {
     if (instances == 0) {
       ++instances;
@@ -155,6 +155,9 @@ public:
   }
 };
 
+// Function to set target speed based on (i) telemetry frequency and (ii) steering angle
+// Speed is reduced when the car is making turns
+// Speed is reduced when the polling frequency is low - like when its running on a slow PC or user selected larger or higher quality rendering in the simulator
 double computeTargetSpeed(double poll_freq, double speed, double steering_angle)
 {
   //std::cout << "poll_freq: " << poll_freq << ", speed: " << speed << ", steering_angle: " << steering_angle;
@@ -182,20 +185,23 @@ int main(int argc, char** argv)
 {
   uWS::Hub h;
 
+  std::cout << "Program usage:\n\tno argument: execute PID controller\n\ttwiddle: run in twiddle mode" << std::endl;
+
+  // Check to see if user wants to twiddle or not
   bool doTwiddle = false;
   PID *steering_pid;
   if (argc >= 2) {
     doTwiddle = true;
-    //steering_pid = new twiddler(0.122567, 1e-5, 1.25273, 0.1, 1);
+    // create instance of twiddler - change starting point as necessary
     steering_pid = new twiddler(0.155933, 1e-3, 2.7479, .1, .1);
   }
   else {
+    // initialize PID controller with good values
     steering_pid = new PID(0.0883237, 0.001, 2.67196);
   }
   event_freq ev_freq;
 
-  //PID steering_pid(0.122567, 1e-5, 4.56273);
-  //PID steering_pid(1.22316, 0, 1.63106);
+  // Aggressive PD controller to generate throttle values to approach target speed
   PID speed_pd(1, 0, 3);
 
   h.onMessage([&steering_pid, &speed_pd, &ev_freq, &doTwiddle](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -222,52 +228,56 @@ int main(int argc, char** argv)
           * another PID controller to control the speed!
           */
 
-          // message from previous run (queued before reset)
+          // message from previous run (queued before reset) - occurs sometimes on faster CPUs
           if (steering_pid->n == 0 && abs(cte) > 5) {
             std::cout << "** n=" << steering_pid->n << ", cte=" << abs(cte) << std::endl;
             steer_value = 0;
           }
           else {
             if (doTwiddle) {
+              // Crash detection
+              // Car has crashed if the CTE is too high (5)
+              // Car has crashed if the speed drops to less than 0.1 (when sometimes it gets stuck on the curb)
               if (steering_pid->n > 2000 || abs(cte) > 5 || (steering_pid->n > 10 && speed < 0.1)) {
                 std::cout << "n=" << steering_pid->n << ", cte=" << abs(cte) << ", speed=" << speed << std::endl;
 
+                // Execyte twiddle iteration
                 if (steering_pid->Optimize()) {
-                  // Completed - stop ?
+                  // Mission accomplished, we have good Kp,Ki,Kd values
+                  // TODO: Can stop at this point
+                  // ws.shutdown();
                   //return;
                 }
 
+                // Reset simulator by sending reset command
                 std::string msg = "42[\"reset\"]";
-                //std::cout << msg << std::endl;
                 ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 
+                // Reset speed PD controller and frequency counter
                 speed_pd.Reset();
                 ev_freq = event_freq();
                 return;
               }
             }
 
-            // Compute steering
+            // Compute steering value from PID controller
             steer_value = steering_pid->ComputeControl(cte);
             steer_value = CAP(steer_value, -1, 1);
             steering_pid->UpdateError(cte);
           }
 
-          // Compute throttle
+          // Compute throttle from steering PD controller
           double target_speed = doTwiddle? 40 : computeTargetSpeed(ev_freq(), speed, steer_value);
           double speed_cte = speed - target_speed;
           double throttle = speed_pd.ComputeControl(speed_cte);
           throttle = CAP(throttle, -1, 1);
           speed_pd.UpdateError(speed_cte);
 
-          // DEBUG
-          //std::cout << "CTE: " << cte << " Steering Value: " << steer_value << ", error:" << steering_pid.TotalError() << std::endl;
-
+          // Output telemetry data to simulator
           json msgJson;
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          //std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
         else {

@@ -26,11 +26,13 @@ double PID::ComputeControl(double cte) {
   return -Kp * cte - Kd * d_error - Ki * i_error;
 }
 
+// Optimize - used only for twiddling
 bool PID::Optimize()
 {
-  return true;
+  return false;
 }
 
+// Reset PID to initial state
 void PID::Reset()
 {
   mse = 0;
